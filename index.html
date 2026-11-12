@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#3b6ef5">
+<meta name="description" content="FSAE 角重量计算器：四轮称重、对角重量、交叉重量、楔形调整、重心反算">
+<title>FSAE 角重量计算器 · Corner Weight</title>
+<!-- PWA：装到手机主屏，全屏无地址栏，离线可用 -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="角重量">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#eef1f7; --card:#ffffff; --ink:#1e2433; --ink2:#606a80; --ink3:#8d97ab;
+  --line:#e4e8f0; --line2:#eef1f7;
+  --acc:#3b6ef5; --acc-soft:#eaf0ff;
+  --ok:#0ea472; --ok-soft:#e6f7f1;
+  --warn:#d98900; --warn-soft:#fdf3e2;
+  --bad:#e0413c; --bad-soft:#fdeceb;
+  --c-fl:#3b6ef5; --c-fr:#8b5cf6; --c-rl:#12b3a8; --c-rr:#e8862a;
+  --r:14px; --r2:10px;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"SFMono-Regular",monospace;
+}
+html,body{height:100%}
+body{
+  font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,-apple-system,sans-serif;
+  background:
+    radial-gradient(1100px 520px at 8% -8%,#dbe4ff 0%,rgba(219,228,255,0) 60%),
+    radial-gradient(900px 480px at 100% 0%,#e2f6f4 0%,rgba(226,246,244,0) 55%),
+    var(--bg);
+  background-attachment:fixed;
+  color:var(--ink); font-size:13px; line-height:1.5; padding:16px 16px 48px;
+  -webkit-font-smoothing:antialiased;
+}
+.app{max-width:1560px;margin:0 auto}
+
+/* ---------- 顶栏 ---------- */
+header.top{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .logo{
+  width:42px;height:42px;border-radius:13px;flex:0 0 auto;position:relative;
+  background:linear-gradient(135deg,#3b6ef5,#6f4bf2 55%,#12b3a8);
+  box-shadow:0 8px 20px rgba(59,110,245,.32);
+}
+.brand .logo::after{content:"";position:absolute;inset:11px;border:2.5px solid rgba(255,255,255,.94);border-radius:6px}
+.brand .logo::before{content:"";position:absolute;inset:19px 11px;border-top:2.5px solid rgba(255,255,255,.94);border-bottom:2.5px solid rgba(255,255,255,.94)}
+.brand h1{font-size:18px;font-weight:700;letter-spacing:.2px}
+.brand p{font-size:11.5px;color:var(--ink2);margin-top:2px}
+.topbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{
+  font-family:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--ink);
+  padding:8px 13px;border-radius:var(--r2);cursor:pointer;transition:.15s;font-weight:500;
+}
+button:hover{border-color:#c3cde4;background:#fafbff;transform:translateY(-1px)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;box-shadow:0 5px 14px rgba(59,110,245,.28)}
+button.primary:hover{background:#2f5fe6;border-color:#2f5fe6}
+button.mini{padding:4px 9px;font-size:11px;border-radius:7px}
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;background:#fff}
+.seg button{border:none;border-radius:0;padding:7px 14px;background:transparent;font-family:var(--mono);font-weight:700;font-size:12px;color:var(--ink2)}
+.seg button:hover{transform:none;background:#f6f8ff}
+.seg button.on{background:var(--acc);color:#fff}
+
+/* ---------- 布局 ---------- */
+.app-grid{display:grid;grid-template-columns:392px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:1120px){.app-grid{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:var(--r);box-shadow:0 2px 10px rgba(24,38,74,.06),0 1px 2px rgba(24,38,74,.04);border:1px solid rgba(228,232,240,.9)}
+.card>.hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 15px;border-bottom:1px solid var(--line2)}
+.card>.hd h2{font-size:13.5px;font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:7px}
+.card>.hd h2 .dot{width:8px;height:8px;border-radius:3px;background:var(--acc);display:inline-block}
+.card>.bd{padding:13px 15px}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+/* 左栏只放四角输入：不压缩、不裁切、无内部滚动 */
+.panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel>*{flex:0 0 auto}
+
+/* ---------- 四角输入（主视觉） ---------- */
+.readcard{border:1px solid #d8e0f2;box-shadow:0 6px 24px rgba(24,38,74,.09),0 2px 5px rgba(24,38,74,.05)}
+.readcard>.hd{padding:13px 16px;background:linear-gradient(180deg,#fbfcff,#f5f8ff);border-bottom:1px solid #e7ecf7;border-radius:var(--r) var(--r) 0 0}
+.readcard>.hd h2{font-size:14.5px}
+.readcard>.hd .sumtop{font-size:11.5px;color:var(--ink2);font-weight:600}
+.readcard>.hd .sumtop b{font-family:var(--mono);font-size:15px;color:var(--ink);letter-spacing:-.5px}
+.readcard>.bd{padding:14px 16px 15px}
+
+.cgrid{display:grid;grid-template-columns:30px 1fr 1fr;gap:9px;align-items:stretch}
+.cgrid .gh{font-size:11px;color:var(--ink3);text-align:center;font-weight:700;letter-spacing:1px;align-self:end;padding-bottom:2px}
+.cgrid .gs{font-size:12px;color:var(--ink3);font-weight:700;display:flex;align-items:center;justify-content:center}
+.cgrid .csub{grid-column:2/4;display:flex;align-items:center;gap:8px;padding:5px 11px;
+  background:#f6f9ff;border:1px dashed #dbe4f5;border-radius:9px}
+.cgrid .csub .k{font-size:11px;color:var(--ink2);font-weight:600;flex:1 1 auto}
+.cgrid .csub .v{font-family:var(--mono);font-size:12.5px;font-weight:700}
+.cgrid .csub .p{font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:44px;text-align:right}
+
+.cc{background:#fff;border:1.5px solid var(--line);border-left:4px solid var(--c);border-radius:12px;padding:9px 11px 8px;transition:.15s}
+.cc:hover{border-color:#cfd9ec;background:#fdfdff}
+.cc:focus-within{border-color:var(--c);background:#fff;box-shadow:0 0 0 4px rgba(59,110,245,.10)}
+.cc .tag{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.5px;display:flex;align-items:center;gap:5px}
+.cc .tag i{width:7px;height:7px;border-radius:2px;background:var(--c);display:inline-block}
+.cc .tag em{font-style:normal;color:var(--ink2);font-weight:600}
+.cc .iw{display:flex;align-items:baseline;gap:4px;margin-top:1px}
+.cc input{border:none;background:transparent;font-size:30px;font-weight:700;font-family:var(--mono);width:100%;min-width:0;
+  text-align:right;color:var(--ink);padding:0;letter-spacing:-1.5px;line-height:1.25}
+.cc input:focus{outline:none;box-shadow:none;background:transparent}
+.cc input::placeholder{color:#c8d1e2;font-weight:600}
+.cc input::-webkit-outer-spin-button,.cc input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cc .u{font-size:11px;color:var(--ink3);flex:0 0 auto;font-family:var(--mono);font-weight:600}
+
+/* 记录本次 */
+.snapbox{margin-top:13px;padding-top:13px;border-top:1px solid var(--line2)}
+.snapbox .row{display:flex;gap:8px}
+.snapbox input[type=text]{flex:1 1 auto;min-width:0;text-align:left;font-family:inherit;font-size:12.5px;padding:9px 11px}
+.snapbox button{flex:0 0 auto;padding:9px 16px;font-size:13px;font-weight:700}
+.vsbox{margin-top:10px;padding:9px 11px;border-radius:10px;background:#f7f9ff;border:1px solid #e5ebf8;font-size:11.5px;line-height:1.7;color:var(--ink2)}
+.vsbox b{font-family:var(--mono);color:var(--ink)}
+.vsbox .up{color:var(--bad);font-weight:700;font-family:var(--mono)}
+.vsbox .down{color:var(--ok);font-weight:700;font-family:var(--mono)}
+.sumline{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);font-size:11px;color:var(--ink3)}
+.sumline .sumtxt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;line-height:1.9}
+.sumline .sumtxt .k{font-family:var(--mono);color:var(--ink2);white-space:nowrap}
+.sumline .sumbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+
+/* ---------- 结果面板 ---------- */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(226px,1fr));gap:12px}
+.rp{background:var(--card);border:1px solid rgba(228,232,240,.9);border-radius:var(--r);
+  box-shadow:0 2px 10px rgba(24,38,74,.05);display:flex;flex-direction:column;min-width:0}
+.rp>.h{display:flex;align-items:center;gap:7px;padding:11px 13px 7px;font-size:10.5px;font-weight:700;color:var(--ink3);letter-spacing:.7px}
+.rp>.h .d{width:7px;height:7px;border-radius:2px;background:var(--acc);flex:0 0 auto}
+.rp>.h .tagx{margin-left:auto;font-size:9.5px;color:var(--c-rl);font-weight:700;letter-spacing:.3px}
+.rp>.b{padding:0 13px 11px;flex:1;min-width:0}
+.big{font-family:var(--mono);font-size:32px;font-weight:700;letter-spacing:-1.5px;line-height:1.15;margin:1px 0 8px;color:var(--ink)}
+.big small{font-size:12px;font-weight:600;color:var(--ink3);margin-left:4px;letter-spacing:0}
+.rw{display:flex;align-items:baseline;gap:6px;padding:4.5px 0;border-bottom:1px dashed var(--line2);font-size:11.5px}
+.rw:last-child{border-bottom:none}
+.rw .nm{color:var(--ink2);flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rw .nm i{width:6px;height:6px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:1px}
+.rw .v{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:-.4px}
+.rw .pc{font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:50px;text-align:right}
+.rw.hl .v{color:var(--c-rl)}
+.rw.sep{border-top:1px solid var(--line);margin-top:2px;padding-top:6px;border-bottom:none}
+.toneup{color:var(--bad)!important}
+
+/* ---------- 分布条 ---------- */
+.bar-row{margin-bottom:11px}
+.bar-row:last-child{margin-bottom:0}
+.bar-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--ink2);margin-bottom:4px}
+.bar-lbl b{color:var(--ink);font-family:var(--mono);font-weight:700}
+.bar{height:23px;border-radius:8px;overflow:hidden;display:flex;background:#f1f4fa;border:1px solid var(--line)}
+.bar .seg2{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;font-family:var(--mono);white-space:nowrap;overflow:hidden}
+.bar .seg2.dark{color:#243044}
+
+/* ---------- 表格 ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.tbl th{font-size:10.5px;font-weight:600;color:var(--ink3);text-align:right;padding:6px;border-bottom:1px solid var(--line);letter-spacing:.3px;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:6px;border-bottom:1px solid var(--line2);text-align:right;font-family:var(--mono);white-space:nowrap}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#fafbff}
+.tbl .kw{display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.tbl .sw{width:7px;height:7px;border-radius:2px;display:inline-block;flex:0 0 auto}
+.up{color:var(--bad);font-weight:700}
+.down{color:var(--ok);font-weight:700}
+.ok{color:var(--ok);font-weight:700}
+.muted{color:var(--ink3)}
+.newrow td{animation:flash 1.6s ease}
+@keyframes flash{0%{background:#e6f7f1}55%{background:#e6f7f1}100%{background:transparent}}
+
+/* ---------- 建议 ---------- */
+.adv{display:flex;gap:9px;padding:9px 11px;border-radius:10px;background:#fafbff;border:1px solid var(--line2);margin-bottom:8px;font-size:11.5px;line-height:1.65}
+.adv:last-child{margin-bottom:0}
+.adv .ic{flex:0 0 auto;width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;margin-top:1px}
+.adv.good{background:var(--ok-soft);border-color:#cdeee2}
+.adv.good .ic{background:var(--ok)}
+.adv.warn{background:var(--warn-soft);border-color:#f6e2bc}
+.adv.warn .ic{background:var(--warn)}
+.adv.bad{background:var(--bad-soft);border-color:#f8d2d0}
+.adv.bad .ic{background:var(--bad)}
+.adv .tx b{font-family:var(--mono)}
+
+/* ---------- 图形 ---------- */
+.two{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:14px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.carsvg{display:block;width:100%;max-width:296px;margin:0 auto}
+.cgrd{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.cgrd .it{background:#fafbff;border:1px solid var(--line2);border-radius:9px;padding:7px 9px}
+.cgrd .it .k{font-size:10px;color:var(--ink3);font-weight:600}
+.cgrd .it .v{font-size:14px;font-weight:700;font-family:var(--mono);margin-top:1px}
+.cgrd .it .v small{font-size:10px;color:var(--ink3);font-weight:500}
+
+/* ---------- 记录 ---------- */
+.snapbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ---------- 设置抽屉 ---------- */
+.drawer-mask{position:fixed;inset:0;background:rgba(24,38,74,.34);opacity:0;pointer-events:none;transition:.2s;z-index:70}
+.drawer-mask.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:388px;max-width:94vw;background:#fff;z-index:71;
+  box-shadow:-10px 0 36px rgba(24,38,74,.18);transform:translateX(103%);transition:transform .24s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer .dh{display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.drawer .dh h2{font-size:14px;font-weight:700}
+.drawer .dh .dot{width:8px;height:8px;border-radius:3px;background:var(--acc)}
+.drawer .dh button{margin-left:auto;border:none;background:#f4f6fb;padding:5px 10px;font-size:13px;line-height:1}
+.drawer .db{padding:14px 16px 28px;overflow-y:auto;flex:1 1 auto;overscroll-behavior:contain}
+.drawer .db::-webkit-scrollbar{width:9px}
+.drawer .db::-webkit-scrollbar-thumb{background:#cfd7e8;border-radius:9px;border:2px solid transparent;background-clip:content-box}
+.dr{margin-bottom:18px}
+.dr:last-child{margin-bottom:0}
+.dr h3{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.dr h3::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--acc)}
+.field{display:grid;grid-template-columns:1fr 104px;gap:8px;align-items:center;margin-bottom:7px}
+.field label{font-size:12px;color:var(--ink2)}
+.field .unit{font-size:10.5px;color:var(--ink3);margin-left:3px}
+input[type=number],input[type=text],select{
+  font-family:var(--mono);font-size:12px;width:100%;padding:6px 8px;border:1px solid var(--line);
+  border-radius:8px;background:#fbfcff;color:var(--ink);text-align:right;transition:.15s;
+}
+select{grid-column:1/-1;text-align:left}
+input[type=number]:focus,input[type=text]:focus,select:focus{outline:none;border-color:var(--acc);background:#fff;box-shadow:0 0 0 3px rgba(59,110,245,.12)}
+input[type=checkbox]{accent-color:var(--acc);width:15px;height:15px;cursor:pointer}
+.chk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);cursor:pointer;user-select:none;margin-bottom:9px}
+.hint{font-size:11px;color:var(--ink2);line-height:1.65}
+.hint b{color:var(--ink);font-family:var(--mono)}
+
+/* ---------- 提示条 ---------- */
+.toast{position:fixed;left:50%;bottom:30px;transform:translate(-50%,16px);background:#1e2433;color:#fff;
+  padding:10px 20px;border-radius:11px;font-size:12.5px;font-weight:600;opacity:0;transition:.24s;
+  z-index:90;pointer-events:none;box-shadow:0 10px 28px rgba(24,38,74,.28)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- 打印 ---------- */
+@media print{
+  body{background:#fff;padding:0;font-size:11px}
+  .no-print,.drawer,.drawer-mask,.toast{display:none!important}
+  .app-grid{grid-template-columns:320px 1fr;gap:10px}
+  .card,.rp{box-shadow:none;border-color:#ccc}
+  .col,.panel{gap:9px}
+  @page{margin:12mm}
+}
+
+/* ================= 移动端 / 触摸 / PWA ================= */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
+button{-webkit-tap-highlight-color:transparent}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}
+.mobilebar{display:none}
+.ioshint{display:none;gap:9px;align-items:flex-start;background:#eef4ff;border:1px solid #d7e3fb;color:var(--ink2);
+  padding:9px 11px;border-radius:10px;font-size:12px;line-height:1.65;margin-bottom:10px}
+.ioshint.on{display:flex}
+.ioshint b{color:var(--ink)}
+.ioshint button{margin-left:auto;flex:0 0 auto;padding:4px 9px;font-size:11px;border-radius:7px}
+@media (display-mode:standalone){
+  body{padding-top:calc(10px + env(safe-area-inset-top))}
+}
+
+@media (max-width:760px){
+  body{padding:10px 10px 94px;font-size:14px}
+  .app-grid{grid-template-columns:1fr;gap:12px}
+  header.top{gap:10px;margin-bottom:10px}
+  .brand .logo{width:36px;height:36px;border-radius:11px}
+  .brand h1{font-size:16px}
+  .brand p{display:none}
+  .topbtns{width:100%;flex-wrap:nowrap;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:3px}
+  .topbtns>*{flex:0 0 auto}
+  .topbtns button{min-height:40px;padding:8px 12px;font-size:12.5px}
+  .seg button{min-height:40px;padding:8px 13px}
+
+  .readcard>.hd{padding:11px 13px}
+  .readcard>.hd h2{font-size:14px}
+  .readcard>.bd{padding:11px 12px 12px}
+  .cgrid{grid-template-columns:24px 1fr 1fr;gap:7px}
+  .cgrid .csub{padding:5px 9px}
+  .cgrid .csub .k{font-size:10.5px}
+  .cc{padding:8px 9px 7px;border-left-width:3px}
+  .cc input{font-size:26px;letter-spacing:-1px}
+  .cc .tag{font-size:9.5px}
+
+  .snapbox{margin-top:11px;padding-top:11px}
+  .snapbox .row{flex-wrap:wrap;gap:8px}
+  .snapbox input[type=text]{flex:1 1 100%;font-size:16px;padding:11px 12px}   /* ≥16px：iOS 聚焦不自动放大 */
+  .snapbox button{flex:1 1 100%;min-height:46px;font-size:14.5px}
+  .vsbox{font-size:12px}
+  .sumline .sumbtns button{min-height:38px;padding:0 12px}
+
+  .rgrid{grid-template-columns:1fr 1fr;gap:10px}
+  .rp-total,.rp-diff{grid-column:1/-1}
+  .rp>.h{padding:9px 11px 6px;font-size:10px;white-space:nowrap;overflow:hidden}
+  .rp>.h .tagx{font-size:9px}
+  .rp>.b{padding:0 11px 10px}
+  .big{font-size:27px;margin-bottom:6px}
+  .rw{font-size:11px;padding:4px 0}
+  .rw .v{font-size:13px}
+  .rw .pc{min-width:44px;font-size:10.5px}
+
+  .two{grid-template-columns:1fr;gap:12px}
+  .carsvg{max-width:205px}
+  .bar-lbl{font-size:10.5px}
+  .cgrd .it .v{font-size:13px}
+
+  .tbl{font-size:11px}
+  .tbl th{font-size:10px;padding:5px 4px}
+  .tbl td{padding:5px 4px}
+  .card>.hd{padding:11px 12px}
+  .card>.bd{padding:11px 12px}
+  .adv{font-size:12px;padding:9px 10px}
+
+  .drawer{width:100%;max-width:100%;border-radius:0;height:100dvh}
+  .drawer .dh{padding-top:calc(14px + env(safe-area-inset-top))}
+  .drawer .db{padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+  .drawer .dh button{min-height:36px;min-width:36px}
+  .field{grid-template-columns:1fr 120px}
+  .field input[type=number],.field input[type=text],.field select{font-size:16px;padding:10px}
+  .dr h3{font-size:13px}
+
+  .toast{left:12px;right:12px;transform:translateY(16px);bottom:calc(84px + env(safe-area-inset-bottom));
+    text-align:center;font-size:12px}
+  .toast.show{transform:translateY(0)}
+
+  .mobilebar{display:flex;align-items:center;gap:12px;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);padding:9px 12px calc(9px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 20px rgba(24,38,74,.09)}
+  .mobilebar .mb-info{flex:1 1 auto;min-width:0}
+  .mobilebar .mb-total{font-family:var(--mono);font-size:21px;font-weight:700;letter-spacing:-1px;line-height:1.15}
+  .mobilebar .mb-total small{font-size:10px;color:var(--ink3);margin-left:3px;font-weight:600;letter-spacing:0}
+  .mobilebar .mb-sub{font-size:10.5px;color:var(--ink3);font-family:var(--mono);margin-top:1px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobilebar button{flex:0 0 auto;min-height:46px;padding:0 18px;font-size:14px;border-radius:12px}
+}
+@media (max-width:430px){
+  .rgrid{grid-template-columns:1fr}
+  .rp-total,.rp-diff{grid-column:auto}
+  .cc input{font-size:24px}
+  .brand h1{font-size:15px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="ioshint no-print" id="iosHint">
+    <div>装到主屏幕：点底部分享 <b>⎙</b> → <b>「添加到主屏幕」</b>，之后从桌面图标一点即开，全屏无地址栏。</div>
+    <button id="iosHintClose">知道了</button>
+  </div>
+
+  <header class="top no-print">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>FSAE 角重量计算器</h1>
+        <p>Corner Weight &amp; Balance · 四轮称重 · 对角重量 · 楔形调整</p>
+      </div>
+    </div>
+    <div class="topbtns">
+      <div class="seg" id="unitSeg">
+        <button data-unit="kg" class="on">kg</button>
+        <button data-unit="lb">lb</button>
+      </div>
+      <button id="btnDrawer">⚙ 设置</button>
+      <button id="btnSnapTop" class="primary">＋ 记录本次</button>
+      <button id="btnCsv">导出 CSV</button>
+      <button id="btnPrint">打印</button>
+    </div>
+  </header>
+
+  <div class="app-grid">
+
+    <!-- ================= 左：只有四角输入 ================= -->
+    <div class="panel">
+      <section class="card readcard">
+        <div class="hd">
+          <h2><span class="dot"></span>四角示数</h2>
+          <span class="sumtop">合计 <b id="hdTotal">0.00</b> <span class="ucl">kg</span></span>
+        </div>
+        <div class="bd">
+
+          <div class="cgrid">
+            <div class="gh"></div>
+            <div class="gh">左 L</div>
+            <div class="gh">右 R</div>
+
+            <div class="gs">前</div>
+            <div class="cc" style="--c:var(--c-fl)">
+              <div class="tag"><i></i>FL <em>左前</em></div>
+              <div class="iw"><input type="number" id="in-fl" step="0.1" inputmode="decimal" placeholder="0.0" aria-label="左前轮示数"><span class="u ucl">kg</span></div>
+            </div>
+            <div class="cc" style="--c:var(--c-fr)">
+              <div class="tag"><i></i>FR <em>右前</em></div>
+              <div class="iw"><input type="number" id="in-fr" step="0.1" inputmode="decimal" placeholder="0.0" aria-label="右前轮示数"><span class="u ucl">kg</span></div>
+            </div>
+            <div class="csub"><span class="k">前轴 FRONT</span><span class="v" id="axF">—</span><span class="p" id="axFp"></span></div>
+
+            <div class="gs">后</div>
+            <div class="cc" style="--c:var(--c-rl)">
+              <div class="tag"><i></i>RL <em>左后</em></div>
+              <div class="iw"><input type="number" id="in-rl" step="0.1" inputmode="decimal" placeholder="0.0" aria-label="左后轮示数"><span class="u ucl">kg</span></div>
+            </div>
+            <div class="cc" style="--c:var(--c-rr)">
+              <div class="tag"><i></i>RR <em>右后</em></div>
+              <div class="iw"><input type="number" id="in-rr" step="0.1" inputmode="decimal" placeholder="0.0" aria-label="右后轮示数"><span class="u ucl">kg</span></div>
+            </div>
+            <div class="csub"><span class="k">后轴 REAR</span><span class="v" id="axR">—</span><span class="p" id="axRp"></span></div>
+          </div>
+
+          <div class="snapbox">
+            <div class="row">
+              <input type="text" id="in-note" list="noteList" placeholder="备注，如 调前 / 换弹簧后 / 带驾驶员" maxlength="40">
+              <datalist id="noteList"></datalist>
+              <button id="btnSnap" class="primary">＋ 记录本次</button>
+            </div>
+            <div class="vsbox" id="vsBox">还没有称重记录。填好四个示数后点「＋ 记录本次」留档，之后每调一次再记一条，就能看到变化。</div>
+          </div>
+
+          <div class="sumline">
+            <div class="sumtxt" id="setSum">—</div>
+            <div class="sumbtns">
+              <button class="mini no-print" id="btnDrawer2">⚙ 修改设置</button>
+              <button class="mini no-print" id="btnClearW">清空示数</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= 右：结果 ================= -->
+    <div class="col">
+
+      <section class="rgrid">
+        <div class="rp rp-total">
+          <div class="h"><span class="d" style="background:#1e2433"></span>整车 TOTAL</div>
+          <div class="b">
+            <div class="big"><span id="k-total">0.00</span><small class="ucl">kg</small></div>
+            <div class="rw"><span class="nm">四角平均</span><span class="v" id="k-mean">—</span><span class="pc"></span></div>
+            <div class="rw"><span class="nm">极差 max−min</span><span class="v" id="k-spread">—</span><span class="pc" id="k-spread-pc">—</span></div>
+            <div class="rw"><span class="nm">最重 / 最轻</span><span class="v" id="k-extreme">—</span><span class="pc"></span></div>
+          </div>
+        </div>
+
+        <div class="rp rp-axial">
+          <div class="h"><span class="d" style="background:var(--c-fl)"></span>轴荷 / 侧荷 AXLE</div>
+          <div class="b" id="kAxial">
+            <div class="rw"><span class="nm">前轴 FRONT</span><span class="v">—</span><span class="pc">—</span></div>
+          </div>
+        </div>
+
+        <div class="rp rp-diag">
+          <div class="h"><span class="d" style="background:var(--c-rl)"></span>对角 / 交叉 DIAGONAL<span class="tagx" id="kCrossTag"></span></div>
+          <div class="b" id="kDiag">
+            <div class="rw"><span class="nm">—</span><span class="v">—</span><span class="pc">—</span></div>
+          </div>
+        </div>
+
+        <div class="rp rp-diff">
+          <div class="h"><span class="d" style="background:var(--warn)"></span>差值 DELTA</div>
+          <div class="b" id="kDiff">
+            <div class="rw"><span class="nm">—</span><span class="v">—</span><span class="pc">—</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="two">
+        <section class="card">
+          <div class="hd"><h2><span class="dot"></span>分布与重心</h2></div>
+          <div class="bd">
+            <div class="bar-row">
+              <div class="bar-lbl"><span>前后轴荷</span><span>前 <b id="bl-front">—</b> · 后 <b id="bl-rear">—</b></span></div>
+              <div class="bar">
+                <div class="seg2" id="barF" style="width:50%;background:var(--c-fl)">—</div>
+                <div class="seg2 dark" id="barR" style="width:50%;background:#a4b4fb">—</div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-lbl"><span>左右侧荷</span><span>左 <b id="bl-left">—</b> · 右 <b id="bl-right">—</b></span></div>
+              <div class="bar">
+                <div class="seg2" id="barL" style="width:50%;background:var(--c-rl)">—</div>
+                <div class="seg2" id="barRt" style="width:50%;background:var(--c-rr)">—</div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-lbl"><span>对角分配</span><span id="bl-diag">—</span></div>
+              <div class="bar">
+                <div class="seg2" id="barC" style="width:50%;background:#12b3a8">—</div>
+                <div class="seg2 dark" id="barA" style="width:50%;background:#cbd5e1">—</div>
+              </div>
+            </div>
+
+            <div class="cgrd">
+              <div class="it"><div class="k">重心距前轴</div><div class="v" id="cg-x">—</div></div>
+              <div class="it"><div class="k">重心距后轴</div><div class="v" id="cg-xr">—</div></div>
+              <div class="it"><div class="k">横向偏移</div><div class="v" id="cg-y">—</div></div>
+              <div class="it"><div class="k">重心高度</div><div class="v" id="cg-h">—</div></div>
+            </div>
+            <div class="hint" style="margin-top:9px" id="cgHint">在「⚙ 设置」里填轴距与轮距后可反算重心位置。</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="hd"><h2><span class="dot"></span>四角载荷 / 重心</h2></div>
+          <div class="bd" style="padding:6px 10px 12px">
+            <svg id="carSvg" class="carsvg" viewBox="0 0 300 420" aria-label="四角载荷与重心示意">
+              <defs>
+                <linearGradient id="gBody" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#f6f9ff"/><stop offset="100%" stop-color="#e6ecfa"/>
+                </linearGradient>
+              </defs>
+              <text x="150" y="16" text-anchor="middle" font-size="10" fill="#8d97ab" font-weight="700" letter-spacing="2">FRONT</text>
+              <line x1="150" y1="34" x2="150" y2="392" stroke="#dbe3f2" stroke-dasharray="4 5"/>
+              <line x1="16" y1="117" x2="284" y2="117" stroke="#e7ecf6" stroke-dasharray="3 5"/>
+              <line x1="16" y1="303" x2="284" y2="303" stroke="#e7ecf6" stroke-dasharray="3 5"/>
+
+              <path d="M150 36 C180 36 196 54 198 88 L198 326 C196 364 180 384 150 384 C120 384 104 364 102 326 L102 88 C104 54 120 36 150 36 Z"
+                    fill="url(#gBody)" stroke="#c9d6ef" stroke-width="1.5"/>
+              <ellipse cx="150" cy="228" rx="40" ry="62" fill="#eaf1fd" stroke="#d6e1f6"/>
+
+              <rect x="36" y="86" width="30" height="62" rx="11" fill="#3b6ef5"/>
+              <rect x="234" y="86" width="30" height="62" rx="11" fill="#8b5cf6"/>
+              <rect x="36" y="272" width="30" height="62" rx="11" fill="#12b3a8"/>
+              <rect x="234" y="272" width="30" height="62" rx="11" fill="#e8862a"/>
+
+              <text x="51" y="124" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">FL</text>
+              <text x="249" y="124" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">FR</text>
+              <text x="51" y="310" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">RL</text>
+              <text x="249" y="310" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">RR</text>
+
+              <text id="sv-fl" x="51" y="166" text-anchor="middle" font-size="12" font-weight="700" fill="#1e2433" font-family="monospace">—</text>
+              <text id="sv-fr" x="249" y="166" text-anchor="middle" font-size="12" font-weight="700" fill="#1e2433" font-family="monospace">—</text>
+              <text id="sv-rl" x="51" y="356" text-anchor="middle" font-size="12" font-weight="700" fill="#1e2433" font-family="monospace">—</text>
+              <text id="sv-rr" x="249" y="356" text-anchor="middle" font-size="12" font-weight="700" fill="#1e2433" font-family="monospace">—</text>
+
+              <g id="cgGroup">
+                <line id="cgV" x1="150" y1="200" x2="150" y2="248" stroke="#e0413c" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>
+                <line id="cgH" x1="126" y1="224" x2="174" y2="224" stroke="#e0413c" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>
+                <circle id="cgDot" cx="150" cy="224" r="9" fill="#e0413c" opacity=".16"/>
+                <circle id="cgCore" cx="150" cy="224" r="4" fill="#e0413c"/>
+              </g>
+
+              <text x="150" y="408" text-anchor="middle" font-size="10" fill="#8d97ab" font-weight="700" letter-spacing="2">REAR</text>
+            </svg>
+            <div class="hint" style="text-align:center;margin-top:4px">
+              <span style="color:#e0413c">●</span> 重心由四角载荷反算
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="hd"><h2><span class="dot"></span>四角明细</h2><span class="hint" id="targetWarn" style="font-weight:600"></span></div>
+        <div class="bd" style="padding:4px 15px 13px">
+          <div class="tablewrap">
+            <table class="tbl">
+              <thead><tr>
+                <th>轮位</th><th>示数</th><th>占总重</th><th>占同轴</th><th>目标</th><th>与目标差</th><th>调整方向</th>
+              </tr></thead>
+              <tbody id="cornerBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="hd"><h2><span class="dot"></span>调整建议</h2></div>
+        <div class="bd" id="advBody">
+          <div class="adv"><div class="ic" style="background:#8d97ab">i</div><div class="tx">输入四个示数后自动给出调整建议。</div></div>
+        </div>
+      </section>
+
+      <section class="card no-print">
+        <div class="hd"><h2><span class="dot"></span>称重记录</h2><span class="hint" id="snapCount">0 条</span></div>
+        <div class="bd">
+          <div class="hint" id="snapVs" style="margin-bottom:8px;display:none"></div>
+          <div style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr>
+                <th>#</th><th>时间</th><th>备注</th><th>FL</th><th>FR</th><th>RL</th><th>RR</th>
+                <th>总重</th><th>前%</th><th>交叉%</th><th>左右差</th><th></th>
+              </tr></thead>
+              <tbody id="snapBody"></tbody>
+            </table>
+          </div>
+          <div class="snapbar" style="margin-top:10px">
+            <button class="mini" id="btnSnapApply">把第 1 条载荷填回输入框</button>
+            <button class="mini" id="btnSnapClear">清空记录</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ 手机底部常驻条：总重 + 记录 ============ -->
+<div class="mobilebar no-print" id="mobileBar">
+  <div class="mb-info">
+    <div class="mb-total"><span id="mbTotal">0.00</span><small class="ucl">kg</small></div>
+    <div class="mb-sub" id="mbSub">交叉 —</div>
+  </div>
+  <button id="btnSnapM" class="primary">＋ 记录本次</button>
+</div>
+
+<!-- ================= 设置抽屉 ================= -->
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dh">
+    <span class="dot"></span>
+    <h2>设置</h2>
+    <button id="drawerClose" title="关闭">✕</button>
+  </div>
+  <div class="db">
+
+    <div class="dr">
+      <h3>车辆参数</h3>
+      <div class="field"><label>轴距 L<span class="unit">mm</span></label><input type="number" id="in-wb" step="1" inputmode="decimal"></div>
+      <div class="field"><label>前轮距<span class="unit">mm</span></label><input type="number" id="in-tf" step="1" inputmode="decimal"></div>
+      <div class="field"><label>后轮距<span class="unit">mm</span></label><input type="number" id="in-tr" step="1" inputmode="decimal"></div>
+      <div class="hint">轮距取<b>左右轮中心距</b>。填了才算重心纵向/横向位置；前后轮距不同时按各自轮距计算。</div>
+    </div>
+
+    <div class="dr">
+      <h3>目标分配</h3>
+      <label class="chk"><input type="checkbox" id="chk-target"> 启用目标对比</label>
+      <div class="field"><label>目标前轴占比<span class="unit">%</span></label><input type="number" id="in-tfront" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label>目标左侧占比<span class="unit">%</span></label><input type="number" id="in-tleft" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label>目标交叉重量<span class="unit">%</span></label><input type="number" id="in-tcross" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label>交叉重量定义</label>
+        <select id="sel-crossmode">
+          <option value="fl_rr">FL + RR</option>
+          <option value="fr_rl">FR + RL</option>
+        </select>
+      </div>
+      <button class="mini" id="btnTargetNow" style="width:100%;margin-top:3px">以当前实测值为目标</button>
+      <div class="hint" style="margin-top:8px">前轴% + 左侧% + 交叉% 必须<b>可行</b>，不可行时四角明细会标红说明原因。</div>
+    </div>
+
+    <div class="dr">
+      <h3>重心高度（倾角法，可选）</h3>
+      <label class="chk"><input type="checkbox" id="chk-lift"> 计算重心高度</label>
+      <div class="field"><label>抬起哪一端</label>
+        <select id="sel-liftside">
+          <option value="rear">抬后轴</option>
+          <option value="front">抬前轴</option>
+        </select>
+      </div>
+      <div class="field"><label>抬起高度 H<span class="unit">mm</span></label><input type="number" id="in-lifth" step="1" inputmode="decimal" placeholder="200"></div>
+      <div class="field"><label>抬起后前轴示数<span class="unit">kg</span></label><input type="number" id="in-liftf2" step="0.1" inputmode="decimal" placeholder="0.0"></div>
+      <div class="hint">
+        把某一端垫高 H，重新读<b>前轴两个秤之和</b>。抬后轴时前轴会<b>变重</b>，抬前轴时会<b>变轻</b>。<br>
+        z = |F₁ − F₂|·L·√(L² − H²) / (W·H)
+      </div>
+    </div>
+
+    <div class="hint" style="padding-top:8px;border-top:1px dashed var(--line)">
+      数据只保存在本机浏览器，不上传。关闭页面前可用「记录本次」留档或「导出 CSV」带走。
+    </div>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<!-- ==================================================================
+     纯计算核心：无任何 DOM 依赖，verify.js 直接抽取在 Node 中运行
+     ================================================================== -->
+<script id="core">
+const CW = (function () {
+  'use strict';
+
+  const KG_PER_LB = 0.45359237;
+  const LB_PER_KG = 1 / KG_PER_LB;
+
+  function num(v) {
+    const x = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(x) ? x : 0;
+  }
+  function ratio(part, whole) {
+    return Math.abs(whole) > 1e-12 ? (part / whole) * 100 : null;
+  }
+  function round(v, d) {
+    if (!Number.isFinite(v)) return null;
+    const p = Math.pow(10, d);
+    return Math.round(v * p) / p;
+  }
+
+  /* ---- 目标四角反算 ----
+     设总重 W、前轴占比 f、左侧占比 l、交叉占比 c，四角为 FL FR RL RR：
+       FL+FR = fW,  FL+RL = lW,  对角 = cW,  四角之和 = W
+     crossMode='fl_rr' 时对角为 FL+RR  =>  FL = W(f+l+c-1)/2
+     crossMode='fr_rl' 时对角为 FR+RL  =>  FL = W(f+l-c)/2
+     其余三角由三个约束直接推出。                                            */
+  function targetCorners(total, t) {
+    const W = num(total);
+    const f = num(t && t.front) / 100;
+    const l = num(t && t.left) / 100;
+    const c = num(t && t.cross) / 100;
+    const mode = (t && t.crossMode === 'fr_rl') ? 'fr_rl' : 'fl_rr';
+
+    const tfl = mode === 'fl_rr' ? W * (f + l + c - 1) / 2 : W * (f + l - c) / 2;
+    const tfr = f * W - tfl;
+    const trl = l * W - tfl;
+    const trr = W - tfl - tfr - trl;
+
+    const eps = 1e-6 * Math.max(1, Math.abs(W));
+    const positive = [tfl, tfr, trl, trr].every(x => x >= -eps);
+    const pctOk = f >= -eps && f <= 1 + eps && l >= -eps && l <= 1 + eps && c >= -eps && c <= 1 + eps;
+
+    let reason = '';
+    if (!pctOk) reason = '目标百分比必须落在 0–100% 之间';
+    else if (!positive) {
+      if (mode === 'fl_rr') {
+        if (f + l + c < 1 - eps) reason = '不可行：前轴% + 左侧% + 交叉% 需 ≥ 100%';
+        else reason = '不可行：交叉% 超出了前轴/左侧占比允许的范围';
+      } else {
+        if (f + l - c < -eps) reason = '不可行：交叉% 不能超过 前轴% + 左侧%';
+        else if (f + l + c > 2 + eps) reason = '不可行：前轴% + 左侧% + 交叉% 需 ≤ 200%';
+        else reason = '不可行：交叉% 低于 |前轴% − 左侧%|';
+      }
+    }
+
+    return {
+      mode: mode,
+      f: f, l: l, c: c,
+      weights: { fl: tfl, fr: tfr, rl: trl, rr: trr },
+      feasible: positive && pctOk,
+      reason: reason
+    };
+  }
+
+  /* ---- 主计算 ---- */
+  function compute(m, vehicle, target) {
+    const w = {
+      fl: num(m && m.fl), fr: num(m && m.fr),
+      rl: num(m && m.rl), rr: num(m && m.rr)
+    };
+    const total = w.fl + w.fr + w.rl + w.rr;
+    const front = w.fl + w.fr;
+    const rear = w.rl + w.rr;
+    const left = w.fl + w.rl;
+    const right = w.fr + w.rr;
+    const diagA = w.fl + w.rr;   // FL + RR
+    const diagB = w.fr + w.rl;   // FR + RL
+    const mode = (target && target.crossMode === 'fr_rl') ? 'fr_rl' : 'fl_rr';
+    const cross = mode === 'fl_rr' ? diagA : diagB;
+    const anti = mode === 'fl_rr' ? diagB : diagA;
+    const ok = total > 1e-9;
+
+    const pct = {
+      front: ratio(front, total), rear: ratio(rear, total),
+      left: ratio(left, total), right: ratio(right, total),
+      diagA: ratio(diagA, total), diagB: ratio(diagB, total),
+      cross: ratio(cross, total), anti: ratio(anti, total),
+      corners: {
+        fl: ratio(w.fl, total), fr: ratio(w.fr, total),
+        rl: ratio(w.rl, total), rr: ratio(w.rr, total)
+      }
+    };
+
+    const keys = ['fl', 'fr', 'rl', 'rr'];
+    let maxK = 'fl', minK = 'fl';
+    keys.forEach(k => {
+      if (w[k] > w[maxK]) maxK = k;
+      if (w[k] < w[minK]) minK = k;
+    });
+
+    const diff = {
+      leftRight: right - left,
+      leftRightPct: ok ? (right - left) / total * 100 : null,
+      frontRear: rear - front,
+      frontRearPct: ok ? (rear - front) / total * 100 : null,
+      diag: diagA - diagB,
+      diagPct: ok ? (diagA - diagB) / total * 100 : null,
+      cross: cross - anti,
+      crossPct: ok ? (cross - anti) / total * 100 : null,
+      spread: w[maxK] - w[minK],
+      spreadPct: ok ? (w[maxK] - w[minK]) / total * 100 : null,
+      mean: total / 4
+    };
+
+    let tgt = null;
+    if (target && target.enabled && ok) {
+      const tc = targetCorners(total, target);
+      const tw = tc.weights;
+      const deltas = {
+        fl: w.fl - tw.fl, fr: w.fr - tw.fr,
+        rl: w.rl - tw.rl, rr: w.rr - tw.rr
+      };
+      const crossTarget = mode === 'fl_rr' ? (tw.fl + tw.rr) : (tw.fr + tw.rl);
+      const crossDelta = cross - crossTarget;
+      const h = crossDelta / 2;
+      const wedge = mode === 'fl_rr'
+        ? { fl: -h, fr: h, rl: h, rr: -h }
+        : { fl: h, fr: -h, rl: -h, rr: h };
+      tgt = {
+        mode: mode,
+        frontPct: tc.f * 100, leftPct: tc.l * 100, crossPct: tc.c * 100,
+        weights: tw, deltas: deltas,
+        feasible: tc.feasible, reason: tc.reason,
+        crossTarget: crossTarget,
+        crossTargetPct: ratio(crossTarget, total),
+        crossDelta: crossDelta,
+        crossDeltaPct: ok ? crossDelta / total * 100 : null,
+        wedge: wedge,
+        pair: mode === 'fl_rr' ? ['fl', 'rr'] : ['fr', 'rl'],
+        antiPair: mode === 'fl_rr' ? ['fr', 'rl'] : ['fl', 'rr']
+      };
+    }
+
+    const L = num(vehicle && vehicle.wheelbase);
+    const Tf = num(vehicle && vehicle.trackF);
+    const Tr = num(vehicle && vehicle.trackR);
+    let cg = null;
+    if (ok) {
+      const hasL = L > 1e-9;
+      const hasT = Tf > 1e-9 && Tr > 1e-9;
+      const xFromFront = hasL ? rear / total * L : null;
+      const yOffset = hasT
+        ? ((w.fr - w.fl) * Tf + (w.rr - w.rl) * Tr) / (2 * total)
+        : null;
+      const halfTrack = hasT ? (Tf + Tr) / 4 : null;
+
+      cg = {
+        xFromFront: xFromFront,
+        xFromRear: hasL ? L - xFromFront : null,
+        xPct: hasL ? xFromFront / L * 100 : null,
+        yOffset: yOffset,
+        halfTrack: halfTrack,
+        yPct: (hasT && yOffset !== null && halfTrack > 1e-9) ? yOffset / halfTrack * 100 : null,
+        height: null, heightPct: null, liftDelta: null, heightWarn: ''
+      };
+
+      const lift = vehicle && vehicle.lift;
+      const rawF2 = lift ? lift.frontLoad : '';
+      const hasF2 = rawF2 !== '' && rawF2 !== null && rawF2 !== undefined &&
+                    Number.isFinite(parseFloat(rawF2));
+      const H = lift ? num(lift.height) : 0;
+
+      if (lift && lift.enabled && hasL && H > 1e-9 && hasF2) {
+        const f1 = front;
+        const f2 = num(rawF2);
+        const side = (lift.side === 'front') ? 'front' : 'rear';
+        cg.liftSide = side;
+        if (H >= L) {
+          cg.heightWarn = '抬升高度不应大于轴距';
+        } else {
+          // 倾斜 θ（sinθ = H/L）后对后接地点取矩，得 F = W·(b/L + z·tanθ/L)
+          // => z = ΔF·L / (W·tanθ) = ΔF·L·√(L²−H²) / (W·H)
+          const z = Math.abs(f1 - f2) * L * Math.sqrt(L * L - H * H) / (total * H);
+          cg.height = z;
+          cg.heightPct = z / L * 100;
+          cg.liftDelta = f2 - f1;
+          cg.f1 = f1; cg.f2 = f2; cg.liftHeight = H;
+          if (!(z > 0) || z > L) cg.heightWarn = '结果异常，请检查抬升高度与示数';
+          else if (side === 'rear' && f2 < f1) cg.heightWarn = '抬后轴时前轴应变重，示数可能填反了';
+          else if (side === 'front' && f2 > f1) cg.heightWarn = '抬前轴时前轴应变轻，示数可能填反了';
+        }
+      }
+    }
+
+    return {
+      ok: ok,
+      weights: w,
+      total: total, front: front, rear: rear, left: left, right: right,
+      diagA: diagA, diagB: diagB, cross: cross, anti: anti, crossMode: mode,
+      pct: pct, diff: diff, target: tgt, cg: cg,
+      extreme: { max: { key: maxK, value: w[maxK] }, min: { key: minK, value: w[minK] } }
+    };
+  }
+
+  return {
+    KG_PER_LB: KG_PER_LB, LB_PER_KG: LB_PER_KG,
+    num: num, ratio: ratio, round: round,
+    targetCorners: targetCorners,
+    compute: compute
+  };
+})();
+if (typeof module !== 'undefined' && module.exports) { module.exports = CW; }
+</script>
+
+<!-- ==================================================================
+     界面层
+     ================================================================== -->
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const D = 2;
+  const LS_KEY = 'fsae-corner-weight/v1';
+  const LB = CW.LB_PER_KG;
+
+  const SHORT = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' };
+  const NAME = { fl: '左前 FL', fr: '右前 FR', rl: '左后 RL', rr: '右后 RR' };
+  const COLOR = { fl: '#3b6ef5', fr: '#8b5cf6', rl: '#12b3a8', rr: '#e8862a' };
+  const NOTE_TIPS = ['调前', '调后', '换弹簧后', '加油后', '带驾驶员', '空车', '胎压调整后'];
+
+  const S = {
+    unit: 'kg',
+    w: { fl: '', fr: '', rl: '', rr: '' },
+    vehicle: { wheelbase: 1550, trackF: 1200, trackR: 1180 },
+    target: { enable: true, front: 45, left: 50, cross: 50, crossMode: 'fl_rr' },
+    lift: { enable: false, h: 200, f2: '', side: 'rear' },
+    note: '',
+    snapshots: []
+  };
+  let R = null;
+  let flashFirst = false;
+  let justSavedTs = null;
+
+  function parseNum(v) {
+    if (v === '' || v === null || v === undefined) return '';
+    const x = parseFloat(v);
+    return Number.isFinite(x) ? x : '';
+  }
+  function nz(v) { return Number.isFinite(v) ? v : 0; }
+  function f(v, d) {
+    const x = typeof v === 'number' ? v : parseFloat(v);
+    if (!Number.isFinite(x)) return '—';
+    return x.toFixed(d === undefined ? D : d);
+  }
+  function fs(v, d) {
+    const x = typeof v === 'number' ? v : parseFloat(v);
+    if (!Number.isFinite(x)) return '—';
+    return (x > 0 ? '+' : '') + x.toFixed(d === undefined ? D : d);
+  }
+  function toKg(v) { return S.unit === 'kg' ? v : v * CW.KG_PER_LB; }
+  function fromKg(v) { return S.unit === 'kg' ? v : v * CW.LB_PER_KG; }
+  const U = () => S.unit;
+
+  /* ---------------- 存取 ---------------- */
+  function save() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      if (!o || typeof o !== 'object') return;
+      if (o.unit === 'kg' || o.unit === 'lb') S.unit = o.unit;
+      if (o.w) ['fl', 'fr', 'rl', 'rr'].forEach(k => { if (k in o.w) S.w[k] = o.w[k]; });
+      if (o.vehicle) ['wheelbase', 'trackF', 'trackR'].forEach(k => {
+        const x = parseNum(o.vehicle[k]); if (x !== '') S.vehicle[k] = x;
+      });
+      if (o.target) {
+        S.target.enable = !!o.target.enable;
+        ['front', 'left', 'cross'].forEach(k => {
+          const x = parseNum(o.target[k]); if (x !== '') S.target[k] = x;
+        });
+        if (o.target.crossMode === 'fr_rl' || o.target.crossMode === 'fl_rr') S.target.crossMode = o.target.crossMode;
+      }
+      if (o.lift) {
+        S.lift.enable = !!o.lift.enable;
+        S.lift.side = o.lift.side === 'front' ? 'front' : 'rear';
+        const h = parseNum(o.lift.h); if (h !== '') S.lift.h = h;
+        if (o.lift.f2 !== undefined) S.lift.f2 = parseNum(o.lift.f2);
+      }
+      if (typeof o.note === 'string') S.note = o.note;
+      if (Array.isArray(o.snapshots)) S.snapshots = o.snapshots.filter(x => x && x.w);
+    } catch (e) { /* 损坏则用默认值 */ }
+  }
+
+  /* ---------------- 输入同步 ---------------- */
+  function syncInputs() {
+    ['fl', 'fr', 'rl', 'rr'].forEach(k => {
+      $('in-' + k).value = S.w[k] === '' ? '' : +nz(S.w[k]).toFixed(2);
+    });
+    $('in-wb').value = S.vehicle.wheelbase;
+    $('in-tf').value = S.vehicle.trackF;
+    $('in-tr').value = S.vehicle.trackR;
+    $('chk-target').checked = S.target.enable;
+    $('in-tfront').value = S.target.front;
+    $('in-tleft').value = S.target.left;
+    $('in-tcross').value = S.target.cross;
+    $('sel-crossmode').value = S.target.crossMode;
+    $('chk-lift').checked = S.lift.enable;
+    $('sel-liftside').value = S.lift.side;
+    $('in-lifth').value = S.lift.h;
+    $('in-liftf2').value = S.lift.f2 === '' ? '' : +nz(S.lift.f2).toFixed(2);
+    $('in-note').value = S.note;
+    document.querySelectorAll('.ucl').forEach(el => { el.textContent = U(); });
+    document.querySelectorAll('#unitSeg button').forEach(b => {
+      b.classList.toggle('on', b.dataset.unit === S.unit);
+    });
+  }
+
+  /* ---------------- 小工具 ---------------- */
+  function rw(name, value, pct, cls) {
+    return '<div class="rw' + (cls ? ' ' + cls : '') + '">' +
+      '<span class="nm">' + name + '</span>' +
+      '<span class="v">' + value + '</span>' +
+      '<span class="pc">' + (pct === undefined ? '' : pct) + '</span></div>';
+  }
+  const dot = c => '<i style="background:' + c + '"></i>';
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+  function fmtTime(ts) {
+    const dt = new Date(ts);
+    const p2 = n => String(n).padStart(2, '0');
+    return (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + p2(dt.getHours()) + ':' + p2(dt.getMinutes());
+  }
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function render() {
+    const veh = {
+      wheelbase: nz(S.vehicle.wheelbase),
+      trackF: nz(S.vehicle.trackF),
+      trackR: nz(S.vehicle.trackR),
+      lift: { enabled: S.lift.enable, height: nz(S.lift.h), frontLoad: S.lift.f2, side: S.lift.side }
+    };
+    R = CW.compute(S.w, veh, {
+      enabled: S.target.enable, front: nz(S.target.front),
+      left: nz(S.target.left), cross: nz(S.target.cross),
+      crossMode: S.target.crossMode
+    });
+
+    const p = R.pct, d = R.diff, u = U(), ok = R.ok;
+
+    /* 左栏 */
+    $('hdTotal').textContent = f(R.total);
+    $('axF').textContent = f(R.front) + ' ' + u;
+    $('axR').textContent = f(R.rear) + ' ' + u;
+    $('axFp').textContent = ok ? f(p.front) + '%' : '';
+    $('axRp').textContent = ok ? f(p.rear) + '%' : '';
+    $('setSum').innerHTML =
+      '<span class="k">轴距 ' + nz(S.vehicle.wheelbase) + '</span> · ' +
+      '<span class="k">轮距 ' + nz(S.vehicle.trackF) + '/' + nz(S.vehicle.trackR) + '</span> · ' +
+      '<span class="k">目标 ' + nz(S.target.front) + '/' + nz(S.target.left) + '/' + nz(S.target.cross) + '</span> · ' +
+      '<span class="k">' + (S.target.crossMode === 'fl_rr' ? 'FL+RR' : 'FR+RL') + '</span>';
+
+    /* 手机底部常驻条 */
+    $('mbTotal').textContent = f(R.total);
+    $('mbSub').textContent = ok
+      ? ('交叉 ' + f(p.cross) + '% · 左右差 ' + fs(d.leftRight) + ' ' + u)
+      : '待输入四角示数';
+
+    /* 整车 */
+    $('k-total').textContent = f(R.total);
+    $('k-mean').textContent = ok ? f(d.mean) : '—';
+    $('k-spread').textContent = ok ? f(d.spread) : '—';
+    $('k-spread-pc').textContent = ok ? f(d.spreadPct) + '%' : '—';
+    $('k-extreme').textContent = ok ? (SHORT[R.extreme.max.key] + ' / ' + SHORT[R.extreme.min.key]) : '—';
+
+    /* 轴荷 / 侧荷 */
+    $('kAxial').innerHTML =
+      rw(dot(COLOR.fl) + '前轴 FRONT', f(R.front), ok ? f(p.front) + '%' : '—') +
+      rw(dot('#12b3a8') + '后轴 REAR', f(R.rear), ok ? f(p.rear) + '%' : '—') +
+      rw(dot('#3b6ef5') + '左侧 LEFT', f(R.left), ok ? f(p.left) + '%' : '—', 'sep') +
+      rw(dot('#e8862a') + '右侧 RIGHT', f(R.right), ok ? f(p.right) + '%' : '—');
+
+    /* 对角 / 交叉 */
+    const isA = R.crossMode === 'fl_rr';
+    $('kCrossTag').textContent = isA ? '交叉 = FL+RR' : '交叉 = FR+RL';
+    $('kDiag').innerHTML =
+      rw(dot('#12b3a8') + (isA ? 'FL + RR' : 'FR + RL') + ' <span style="color:#12b3a8;font-size:9.5px">交叉</span>',
+        f(R.cross), ok ? f(p.cross) + '%' : '—', 'hl') +
+      rw(dot('#a5b4cb') + (isA ? 'FR + RL' : 'FL + RR'), f(R.anti), ok ? f(p.anti) + '%' : '—') +
+      rw('对角差', fs(R.cross - R.anti), ok ? f(p.cross - p.anti) + '%' : '—', 'sep');
+
+    /* 差值 */
+    const lrCls = ok && Math.abs(p.right - p.left) > 1 ? 'toneup' : '';
+    $('kDiff').innerHTML =
+      rw(dot('#d98900') + '左右差 R−L', '<span class="' + lrCls + '">' + fs(d.leftRight) + '</span>',
+        ok ? fs(p.right - p.left) + '%' : '—') +
+      rw(dot('#8b5cf6') + '前后差 R−F', fs(d.frontRear), ok ? fs(d.frontRearPct) + '%' : '—') +
+      rw(dot('#a5b4cb') + '对角差', fs(d.diag), ok ? fs(d.diagPct) + '%' : '—');
+
+    /* 分布条 */
+    const pf = ok ? p.front : 50, pr = ok ? p.rear : 50;
+    $('barF').style.width = pf + '%';
+    $('barR').style.width = pr + '%';
+    $('barF').textContent = '前 ' + f(p.front) + '%';
+    $('barR').textContent = '后 ' + f(p.rear) + '%';
+    $('bl-front').textContent = f(R.front) + ' ' + u;
+    $('bl-rear').textContent = f(R.rear) + ' ' + u;
+
+    const pl = ok ? p.left : 50, prt = ok ? p.right : 50;
+    $('barL').style.width = pl + '%';
+    $('barRt').style.width = prt + '%';
+    $('barL').textContent = '左 ' + f(p.left) + '%';
+    $('barRt').textContent = '右 ' + f(p.right) + '%';
+    $('bl-left').textContent = f(R.left) + ' ' + u;
+    $('bl-right').textContent = f(R.right) + ' ' + u;
+
+    const pc = ok ? p.cross : 50, pa = ok ? p.anti : 50;
+    $('barC').style.width = pc + '%';
+    $('barA').style.width = pa + '%';
+    $('barC').textContent = (isA ? 'FL+RR ' : 'FR+RL ') + f(p.cross) + '%';
+    $('barA').textContent = (isA ? 'FR+RL ' : 'FL+RR ') + f(p.anti) + '%';
+    $('bl-diag').textContent = '差 ' + fs(R.cross - R.anti) + ' ' + u;
+
+    /* 重心 */
+    const cg = R.cg;
+    $('cg-x').innerHTML = (cg && cg.xFromFront !== null) ? f(cg.xFromFront, 0) + '<small> mm</small>' : '—';
+    $('cg-xr').innerHTML = (cg && cg.xFromRear !== null) ? f(cg.xFromRear, 0) + '<small> mm</small>' : '—';
+    $('cg-y').innerHTML = (cg && cg.yOffset !== null) ? fs(cg.yOffset, 0) + '<small> mm</small>' : '—';
+    $('cg-h').innerHTML = (cg && cg.height !== null) ? f(cg.height, 0) + '<small> mm</small>' : '—';
+
+    const hint = [];
+    if (cg && cg.xFromFront !== null) {
+      hint.push('重心在轴距上距前轴 <b>' + f(cg.xFromFront, 0) + ' mm</b>（' + f(cg.xPct, 1) + '% 处）。');
+    }
+    if (cg && cg.yOffset !== null) {
+      const side = cg.yOffset > 0.5 ? '偏右' : (cg.yOffset < -0.5 ? '偏左' : '基本居中');
+      hint.push('横向 ' + side + ' <b>' + f(Math.abs(cg.yOffset), 0) + ' mm</b>（占半轮距 ' + f(Math.abs(cg.yPct), 1) + '%）。');
+    }
+    if (cg && cg.height !== null) {
+      if (cg.heightWarn) hint.push('<span style="color:#d98900">⚠ ' + cg.heightWarn + '</span>');
+      else hint.push('重心高度 <b>' + f(cg.height, 0) + ' mm</b>（倾角法，抬升 ' + f(cg.liftHeight, 0) + ' mm，前轴 ' + f(cg.f1) + '→' + f(cg.f2) + '）。');
+    }
+    if (!hint.length) hint.push('在「⚙ 设置」里填轴距与轮距后可反算重心位置。');
+    $('cgHint').innerHTML = hint.join(' ');
+
+    /* 俯视图 */
+    ['fl', 'fr', 'rl', 'rr'].forEach(k => { $('sv-' + k).textContent = f(R.weights[k], 1); });
+    if (cg && cg.xFromFront !== null) {
+      const L = nz(S.vehicle.wheelbase) || 1;
+      const Tf = nz(S.vehicle.trackF), Tr = nz(S.vehicle.trackR);
+      const nn = v => Math.round(v * 10) / 10;
+      let cx = 150, cy = 117 + (cg.xFromFront / L) * (303 - 117);
+      if (cg.yOffset !== null && Tf > 0 && Tr > 0) {
+        cx = 150 + (cg.yOffset / ((Tf + Tr) / 2)) * 99;
+      }
+      cx = nn(Math.max(74, Math.min(226, cx)));
+      cy = nn(Math.max(64, Math.min(356, cy)));
+      $('cgDot').setAttribute('cx', cx); $('cgDot').setAttribute('cy', cy);
+      $('cgCore').setAttribute('cx', cx); $('cgCore').setAttribute('cy', cy);
+      $('cgV').setAttribute('x1', cx); $('cgV').setAttribute('x2', cx);
+      $('cgV').setAttribute('y1', nn(Math.max(48, cy - 26)));
+      $('cgV').setAttribute('y2', nn(Math.min(372, cy + 26)));
+      $('cgH').setAttribute('y1', cy); $('cgH').setAttribute('y2', cy);
+      $('cgH').setAttribute('x1', nn(Math.max(28, cx - 26)));
+      $('cgH').setAttribute('x2', nn(Math.min(272, cx + 26)));
+      $('cgGroup').setAttribute('opacity', '1');
+    } else {
+      $('cgGroup').setAttribute('opacity', '0');
+    }
+
+    /* 四角明细 */
+    const tgt = R.target;
+    const showTgt = !!(tgt && tgt.feasible);
+    const rows = [];
+    ['fl', 'fr', 'rl', 'rr'].forEach(k => {
+      const axle = (k === 'fl' || k === 'fr') ? R.front : R.rear;
+      const within = axle > 1e-9 ? R.weights[k] / axle * 100 : null;
+      const tv = showTgt ? tgt.weights[k] : null;
+      const dv = showTgt ? tgt.deltas[k] : null;
+      let adj = '<span class="muted">—</span>';
+      if (dv !== null) {
+        if (Math.abs(dv) < 0.05) adj = '<span class="ok">达标</span>';
+        else if (dv > 0) adj = '<span class="up">▼ 减 ' + f(Math.abs(dv)) + '</span>';
+        else adj = '<span class="down">▲ 加 ' + f(Math.abs(dv)) + '</span>';
+      }
+      rows.push('<tr>' +
+        '<td><span class="kw"><i class="sw" style="background:' + COLOR[k] + '"></i>' + NAME[k] + '</span></td>' +
+        '<td>' + f(R.weights[k]) + '</td>' +
+        '<td>' + f(p.corners[k]) + '%</td>' +
+        '<td>' + (within === null ? '—' : f(within) + '%') + '</td>' +
+        '<td>' + (tv === null ? '<span class="muted">—</span>' : '<span style="color:#12b3a8;font-weight:700">' + f(tv) + '</span>') + '</td>' +
+        '<td>' + (dv === null ? '<span class="muted">—</span>' : fs(dv)) + '</td>' +
+        '<td>' + adj + '</td></tr>');
+    });
+    $('cornerBody').innerHTML = rows.join('');
+
+    const warnEl = $('targetWarn');
+    if (!S.target.enable) { warnEl.textContent = '未启用目标对比'; warnEl.style.color = 'var(--ink3)'; }
+    else if (!ok) { warnEl.textContent = ''; }
+    else if (!tgt.feasible) { warnEl.textContent = '⚠ ' + tgt.reason; warnEl.style.color = 'var(--bad)'; }
+    else { warnEl.textContent = '目标可行'; warnEl.style.color = 'var(--ok)'; }
+
+    $('advBody').innerHTML = buildAdvice().join('');
+
+    renderVs();
+    renderSnaps();
+  }
+
+  /* ---------------- 当前 vs 第 1 条记录 ---------------- */
+  function renderVs() {
+    const box = $('vsBox');
+    if (!R || !R.ok) {
+      box.innerHTML = '还没有称重记录。填好四个示数后点「＋ 记录本次」留档，之后每调一次再记一条，就能看到变化。';
+      return;
+    }
+    const last = S.snapshots[0];
+    if (!last) {
+      box.innerHTML = '当前 <b>' + f(R.total) + ' ' + U() + '</b> · 交叉 <b>' + f(R.pct.cross) + '%</b>。' +
+        '点「＋ 记录本次」把它存成第 1 条记录。';
+      return;
+    }
+    const u = U();
+    const dTot = R.total - fromKg(last.total);
+    const dCross = R.pct.cross - last.crossPct;
+    const dLR = R.diff.leftRight - fromKg(last.leftRight);
+    const same = ['fl', 'fr', 'rl', 'rr'].every(k => Math.abs(toKg(nz(S.w[k])) - last.w[k]) < 1e-6);
+    const cls = v => Math.abs(v) < 0.005 ? '' : (v > 0 ? 'up' : 'down');
+    const noteTxt = last.note ? '（' + esc(last.note) + '）' : '';
+
+    if (same) {
+      if (justSavedTs === last.ts) {
+        box.innerHTML = '✓ 已记录为第 ' + S.snapshots.length + ' 条 · <b>' + f(R.total) + ' ' + U() +
+          '</b> · 交叉 <b>' + f(R.pct.cross) + '%</b>。调完车后再点「＋ 记录本次」，这里就会显示变化。';
+      } else {
+        box.innerHTML = '当前示数与第 1 条记录' + noteTxt + ' <span class="muted">' + fmtTime(last.ts) +
+          '</span> <b>完全相同</b>。调完车再记一条即可对比变化。';
+      }
+      return;
+    }
+    box.innerHTML =
+      '对比第 1 条记录' + noteTxt + ' <span class="muted">' + fmtTime(last.ts) + '</span>：<br>' +
+      '总重 <span class="' + cls(dTot) + '">' + fs(dTot) + ' ' + u + '</span>' +
+      '，交叉 <span class="' + cls(dCross) + '">' + fs(dCross) + '%</span>' +
+      '，左右差 <span class="' + cls(dLR) + '">' + fs(dLR) + ' ' + u + '</span>';
+  }
+
+  /* ---------------- 建议 ---------------- */
+  function buildAdvice() {
+    const out = [];
+    const u = U();
+    const p = R.pct;
+    if (!R.ok) {
+      return ['<div class="adv"><div class="ic" style="background:#8d97ab">i</div><div class="tx">' +
+        '在左侧输入四个秤的示数（kg 或 lb 皆可，右上角切换）即可开始计算。</div></div>'];
+    }
+    const tgt = R.target;
+    const tol = Math.max(0.1, R.total * 0.001);
+
+    if (tgt && tgt.feasible) {
+      const mode = tgt.mode;
+      const pairLbl = mode === 'fl_rr' ? 'FL + RR' : 'FR + RL';
+      const dl = tgt.crossDelta;
+      if (Math.abs(dl) <= tol) {
+        out.push('<div class="adv good"><div class="ic">✓</div><div class="tx">' +
+          '交叉重量（' + pairLbl + '）<b>' + f(R.cross) + ' ' + u + ' / ' + f(p.cross) + '%</b>，' +
+          '目标 <b>' + f(tgt.crossPct) + '%</b>，偏差 ' + fs(tgt.crossDeltaPct) + '%，已达标。</div></div>');
+      } else {
+        const over = dl > 0;
+        const amt = Math.abs(dl) / 2;
+        const dec = mode === 'fl_rr' ? 'FL、RR' : 'FR、RL';
+        const inc = mode === 'fl_rr' ? 'FR、RL' : 'FL、RR';
+        out.push('<div class="adv ' + (Math.abs(tgt.crossDeltaPct) > 1 ? 'bad' : 'warn') + '">' +
+          '<div class="ic">' + (Math.abs(tgt.crossDeltaPct) > 1 ? '!' : '▲') + '</div><div class="tx">' +
+          '交叉重量（' + pairLbl + '）<b>' + f(p.cross) + '%</b>，目标 <b>' + f(tgt.crossPct) + '%</b>，' +
+          (over ? '偏大 ' : '偏小 ') + f(Math.abs(tgt.crossDeltaPct)) + '%。<br>' +
+          '调整：把 <b>' + dec + '</b> 各' + (over ? '减' : '加') + ' <b>' + f(amt) + ' ' + u + '</b>，' +
+          '<b>' + inc + '</b> 各' + (over ? '加' : '减') + ' <b>' + f(amt) + ' ' + u + '</b>' +
+          '（调弹簧座/预载，总重不变）。</div></div>');
+      }
+    }
+
+    const lr = p.right - p.left;
+    if (Math.abs(lr) > 1) {
+      out.push('<div class="adv warn"><div class="ic">L</div><div class="tx">' +
+        '左右偏载 <b>' + fs(R.diff.leftRight) + ' ' + u + '</b>（' + fs(lr) + '%），' +
+        (lr > 0 ? '右侧偏重' : '左侧偏重') + '。先确认驾驶员是否已上车、胎压是否一致，再查弹簧预载与配重。</div></div>');
+    } else {
+      out.push('<div class="adv good"><div class="ic">✓</div><div class="tx">' +
+        '左右偏载 <b>' + fs(R.diff.leftRight) + ' ' + u + '</b>（' + fs(lr) + '%），在 1% 以内。</div></div>');
+    }
+
+    out.push('<div class="adv"><div class="ic" style="background:#3b6ef5">F</div><div class="tx">' +
+      '静态轴荷分配：前 <b>' + f(p.front) + '%</b> / 后 <b>' + f(p.rear) + '%</b>，' +
+      '左 <b>' + f(p.left) + '%</b> / 右 <b>' + f(p.right) + '%</b>。' +
+      '重心距前轴 <b>' + (R.cg && R.cg.xFromFront !== null ? f(R.cg.xFromFront, 0) + ' mm' : '—') + '</b>' +
+      '（轴距的 <b>' + (R.cg ? f(R.cg.xPct, 1) + '%' : '—') + '</b>）。</div></div>');
+
+    if (tgt && !tgt.feasible) {
+      out.push('<div class="adv bad"><div class="ic">!</div><div class="tx">目标组合不可行：' + tgt.reason +
+        '。请在「⚙ 设置 → 目标分配」里调整。</div></div>');
+    } else if (tgt && tgt.feasible) {
+      const bad = [];
+      ['fl', 'fr', 'rl', 'rr'].forEach(k => {
+        if (Math.abs(tgt.deltas[k]) > 0.5) bad.push(SHORT[k] + ' ' + fs(tgt.deltas[k]));
+      });
+      if (bad.length) {
+        out.push('<div class="adv"><div class="ic" style="background:#8b5cf6">T</div><div class="tx">' +
+          '若要完全匹配目标（含前后/左右分配），需增删重量：<b>' + bad.join('，') + ' ' + u + '</b>。' +
+          '用弹簧座只能调交叉，前后与左右分配要靠配重或移动部件。</div></div>');
+      }
+    }
+
+    out.push('<div class="adv"><div class="ic" style="background:#12b3a8">Δ</div><div class="tx">' +
+      '单角最大 <b>' + SHORT[R.extreme.max.key] + ' ' + f(R.extreme.max.value) + '</b>，' +
+      '最小 <b>' + SHORT[R.extreme.min.key] + ' ' + f(R.extreme.min.value) + '</b>，' +
+      '极差 <b>' + f(R.diff.spread) + ' ' + u + '</b>（' + f(R.diff.spreadPct) + '%），' +
+      '四角平均 <b>' + f(R.diff.mean) + ' ' + u + '</b>。</div></div>');
+
+    return out;
+  }
+
+  /* ---------------- 记录 ---------------- */
+  function snapshot() {
+    if (!R || !R.ok) { toast('先填四个示数再记录'); return; }
+    const last = S.snapshots[0];
+    const same = last && ['fl', 'fr', 'rl', 'rr'].every(k => Math.abs(toKg(nz(S.w[k])) - last.w[k]) < 1e-6);
+    if (same && !confirm('当前示数与上一条记录完全相同，仍要再记一条吗？')) return;
+
+    S.snapshots.unshift({
+      ts: Date.now(),
+      note: (S.note || '').trim(),
+      w: { fl: toKg(nz(S.w.fl)), fr: toKg(nz(S.w.fr)), rl: toKg(nz(S.w.rl)), rr: toKg(nz(S.w.rr)) },
+      total: toKg(R.total),
+      frontPct: R.pct.front,
+      crossPct: R.pct.cross,
+      leftRight: toKg(R.diff.leftRight),
+      crossMode: R.crossMode
+    });
+    if (S.snapshots.length > 80) S.snapshots.length = 80;
+    flashFirst = true;
+    justSavedTs = S.snapshots[0].ts;
+    save();
+    renderVs();
+    renderSnaps();
+    flashFirst = false;
+    toast('已记录第 1 条 · ' + f(R.total) + ' ' + U() + ' · 交叉 ' + f(R.pct.cross) + '%');
+  }
+
+  function renderNotes() {
+    const set = NOTE_TIPS.slice();
+    S.snapshots.forEach(s => { if (s.note && set.indexOf(s.note) < 0) set.push(s.note); });
+    $('noteList').innerHTML = set.map(n => '<option value="' + esc(n) + '"></option>').join('');
+  }
+
+  function renderSnaps() {
+    const body = $('snapBody');
+    const list = S.snapshots;
+    $('snapCount').textContent = list.length + ' 条';
+    renderNotes();
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="12" class="muted" style="text-align:center;padding:14px">' +
+        '还没有记录。填好四角示数点「＋ 记录本次」，调完车再记一条，就能对比变化。</td></tr>';
+      $('snapVs').style.display = 'none';
+      return;
+    }
+    const u = U();
+    body.innerHTML = list.map((s, i) => {
+      const btn = '<button class="mini no-print" data-del="' + i + '" style="padding:2px 7px;font-size:10px">删</button>';
+      return '<tr' + (i === 0 && flashFirst ? ' class="newrow"' : '') + '>' +
+        '<td class="muted">' + (list.length - i) + '</td>' +
+        '<td class="muted">' + fmtTime(s.ts) + '</td>' +
+        '<td style="text-align:left;font-family:inherit;max-width:130px;overflow:hidden;text-overflow:ellipsis">' +
+          (esc(s.note) || '<span class="muted">—</span>') + '</td>' +
+        '<td>' + f(fromKg(s.w.fl)) + '</td>' +
+        '<td>' + f(fromKg(s.w.fr)) + '</td>' +
+        '<td>' + f(fromKg(s.w.rl)) + '</td>' +
+        '<td>' + f(fromKg(s.w.rr)) + '</td>' +
+        '<td style="font-weight:700">' + f(fromKg(s.total)) + '</td>' +
+        '<td>' + f(s.frontPct) + '</td>' +
+        '<td style="font-weight:700;color:#12b3a8">' + f(s.crossPct) + '</td>' +
+        '<td>' + fs(fromKg(s.leftRight)) + '</td>' +
+        '<td>' + btn + '</td></tr>';
+    }).join('');
+
+    const vs = $('snapVs');
+    if (list.length >= 2) {
+      const a = list[0], b = list[1];
+      const dTotal = fromKg(a.total - b.total);
+      const dCross = a.crossPct - b.crossPct;
+      vs.style.display = 'block';
+      vs.innerHTML = '记录表对比（第 1 条 vs 第 2 条）：总重 <b style="color:' +
+        (Math.abs(dTotal) < 0.05 ? '#606a80' : '#3b6ef5') + '">' + fs(dTotal) + ' ' + u +
+        '</b>，交叉 <b style="color:' + (Math.abs(dCross) < 0.05 ? '#606a80' : '#12b3a8') + '">' +
+        fs(dCross) + '%</b>，前轴 <b>' + fs(a.frontPct - b.frontPct) + '%</b>。';
+    } else {
+      vs.style.display = 'none';
+    }
+  }
+
+  /* ---------------- 导出 ---------------- */
+  function csvCell(v) {
+    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  }
+  function exportCsv() {
+    if (!R) return;
+    const u = U();
+    const L = [];
+    const add = (a, b) => L.push(csvCell(a) + ',' + csvCell(b));
+    const blank = () => L.push('');
+    const dt = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const stamp = dt.getFullYear() + '-' + p2(dt.getMonth() + 1) + '-' + p2(dt.getDate()) + ' ' +
+                  p2(dt.getHours()) + ':' + p2(dt.getMinutes());
+
+    add('FSAE 角重量报告', '');
+    add('导出时间', stamp);
+    add('单位', u);
+    blank();
+    add('四角示数', '');
+    ['fl', 'fr', 'rl', 'rr'].forEach(k => add(NAME[k] + ' (' + u + ')', f(R.weights[k])));
+    add('总重量 (' + u + ')', f(R.total));
+    blank();
+    add('轴荷 / 侧荷', '');
+    add('前轴 (' + u + ')', f(R.front));
+    add('前轴占比 (%)', f(R.pct.front));
+    add('后轴 (' + u + ')', f(R.rear));
+    add('后轴占比 (%)', f(R.pct.rear));
+    add('左侧 (' + u + ')', f(R.left));
+    add('左侧占比 (%)', f(R.pct.left));
+    add('右侧 (' + u + ')', f(R.right));
+    add('右侧占比 (%)', f(R.pct.right));
+    blank();
+    add('对角 / 交叉', '');
+    add('FL+RR (' + u + ')', f(R.diagA));
+    add('FL+RR (%)', f(R.pct.diagA));
+    add('FR+RL (' + u + ')', f(R.diagB));
+    add('FR+RL (%)', f(R.pct.diagB));
+    add('交叉重量定义', R.crossMode === 'fl_rr' ? 'FL+RR' : 'FR+RL');
+    add('交叉重量 (' + u + ')', f(R.cross));
+    add('交叉重量 (%)', f(R.pct.cross));
+    add('对角差 (' + u + ')', fs(R.diff.diag));
+    add('对角差 (%)', fs(R.diff.diagPct));
+    blank();
+    add('差值', '');
+    add('左右差 R-L (' + u + ')', fs(R.diff.leftRight));
+    add('左右差 (%)', fs(R.pct.right - R.pct.left));
+    add('前后差 R-F (' + u + ')', fs(R.diff.frontRear));
+    add('前后差 (%)', fs(R.diff.frontRearPct));
+    add('极差 max-min (' + u + ')', f(R.diff.spread));
+    add('极差 (%)', f(R.diff.spreadPct));
+    add('四角平均 (' + u + ')', f(R.diff.mean));
+    blank();
+    add('车辆参数与重心', '');
+    add('轴距 (mm)', S.vehicle.wheelbase);
+    add('前轮距 (mm)', S.vehicle.trackF);
+    add('后轮距 (mm)', S.vehicle.trackR);
+    if (R.cg) {
+      if (R.cg.xFromFront !== null) {
+        add('重心距前轴 (mm)', f(R.cg.xFromFront, 1));
+        add('重心距后轴 (mm)', f(R.cg.xFromRear, 1));
+      }
+      if (R.cg.yOffset !== null) add('横向偏移 (mm, 右为正)', fs(R.cg.yOffset, 1));
+      if (R.cg.height !== null) add('重心高度 (mm, 倾角法)', f(R.cg.height, 1));
+    }
+    blank();
+    if (R.target) {
+      add('目标对比', '');
+      add('目标前轴 (%)', f(R.target.frontPct));
+      add('目标左侧 (%)', f(R.target.leftPct));
+      add('目标交叉 (%)', f(R.target.crossPct));
+      add('目标可行性', R.target.feasible ? '可行' : ('不可行：' + R.target.reason));
+      if (R.target.feasible) {
+        ['fl', 'fr', 'rl', 'rr'].forEach(k => {
+          add('目标 ' + SHORT[k] + ' (' + u + ')', f(R.target.weights[k]));
+          add('偏差 ' + SHORT[k] + ' (' + u + ')', fs(R.target.deltas[k]));
+        });
+        add('交叉需增减 (' + u + ')', fs(-R.target.crossDelta));
+      }
+      blank();
+    }
+    if (S.snapshots.length) {
+      add('称重记录（原始单位 kg）', '');
+      L.push(['时间', '备注', 'FL', 'FR', 'RL', 'RR', '总重', '前%', '交叉%', '左右差'].map(csvCell).join(','));
+      S.snapshots.slice().reverse().forEach(s => {
+        L.push([new Date(s.ts).toLocaleString('zh-CN'), s.note, f(s.w.fl), f(s.w.fr), f(s.w.rl), f(s.w.rr),
+                f(s.total), f(s.frontPct), f(s.crossPct), fs(s.leftRight)].map(csvCell).join(','));
+      });
+    }
+
+    const blob = new Blob(['\ufeff' + L.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'corner-weight-' + dt.getFullYear() + p2(dt.getMonth() + 1) + p2(dt.getDate()) + '-' +
+                 p2(dt.getHours()) + p2(dt.getMinutes()) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 200);
+  }
+
+  /* ---------------- 抽屉 ---------------- */
+  function openDrawer() {
+    $('drawer').classList.add('open');
+    $('drawerMask').classList.add('open');
+    $('drawer').setAttribute('aria-hidden', 'false');
+  }
+  function closeDrawer() {
+    $('drawer').classList.remove('open');
+    $('drawerMask').classList.remove('open');
+    $('drawer').setAttribute('aria-hidden', 'true');
+  }
+
+  /* ---------------- 事件 ---------------- */
+  function bindNum(id, set) {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener('input', () => { set(parseNum(el.value)); render(); save(); });
+  }
+
+  function init() {
+    load();
+    syncInputs();
+
+    ['fl', 'fr', 'rl', 'rr'].forEach(k => bindNum('in-' + k, v => { S.w[k] = v; justSavedTs = null; }));
+    bindNum('in-wb', v => { S.vehicle.wheelbase = v === '' ? 0 : v; });
+    bindNum('in-tf', v => { S.vehicle.trackF = v === '' ? 0 : v; });
+    bindNum('in-tr', v => { S.vehicle.trackR = v === '' ? 0 : v; });
+    bindNum('in-tfront', v => { S.target.front = v === '' ? 0 : v; });
+    bindNum('in-tleft', v => { S.target.left = v === '' ? 0 : v; });
+    bindNum('in-tcross', v => { S.target.cross = v === '' ? 0 : v; });
+    bindNum('in-lifth', v => { S.lift.h = v === '' ? 0 : v; });
+    bindNum('in-liftf2', v => { S.lift.f2 = v; });
+
+    $('chk-target').addEventListener('change', e => { S.target.enable = e.target.checked; render(); save(); });
+    $('chk-lift').addEventListener('change', e => { S.lift.enable = e.target.checked; render(); save(); });
+    $('sel-crossmode').addEventListener('change', e => { S.target.crossMode = e.target.value; render(); save(); });
+    $('sel-liftside').addEventListener('change', e => { S.lift.side = e.target.value; render(); save(); });
+    $('in-note').addEventListener('input', e => { S.note = e.target.value; save(); });
+    $('in-note').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); snapshot(); }
+    });
+
+    document.querySelectorAll('#unitSeg button').forEach(b => {
+      b.addEventListener('click', () => {
+        const to = b.dataset.unit;
+        if (to !== S.unit) {
+          const fac = to === 'lb' ? LB : CW.KG_PER_LB;
+          ['fl', 'fr', 'rl', 'rr'].forEach(k => {
+            if (S.w[k] !== '' && Number.isFinite(+S.w[k])) S.w[k] = +(+S.w[k] * fac).toFixed(3);
+          });
+          if (S.lift.f2 !== '' && Number.isFinite(+S.lift.f2)) S.lift.f2 = +(+S.lift.f2 * fac).toFixed(3);
+          S.unit = to;
+        }
+        syncInputs(); render(); save();
+      });
+    });
+
+    $('btnDrawer').addEventListener('click', openDrawer);
+    $('btnDrawer2').addEventListener('click', openDrawer);
+    $('drawerClose').addEventListener('click', closeDrawer);
+    $('drawerMask').addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+    $('btnTargetNow').addEventListener('click', () => {
+      if (!R || !R.ok) { toast('先填四个示数'); return; }
+      S.target.enable = true;
+      S.target.front = +R.pct.front.toFixed(2);
+      S.target.left = +R.pct.left.toFixed(2);
+      S.target.cross = +R.pct.cross.toFixed(2);
+      syncInputs(); render(); save();
+      toast('已把当前实测值设为目标');
+    });
+
+    $('btnClearW').addEventListener('click', () => {
+      ['fl', 'fr', 'rl', 'rr'].forEach(k => { S.w[k] = ''; });
+      syncInputs(); render(); save();
+    });
+
+    $('btnSnap').addEventListener('click', snapshot);
+    $('btnSnapTop').addEventListener('click', snapshot);
+
+    $('btnSnapApply').addEventListener('click', () => {
+      const s = S.snapshots[0];
+      if (!s) { toast('还没有记录'); return; }
+      justSavedTs = null;
+      ['fl', 'fr', 'rl', 'rr'].forEach(k => { S.w[k] = +fromKg(s.w[k]).toFixed(2); });
+      syncInputs(); render(); save();
+      toast('已把第 1 条记录的载荷填回输入框');
+    });
+
+    $('btnSnapClear').addEventListener('click', () => {
+      if (!S.snapshots.length) { toast('没有记录可清空'); return; }
+      if (confirm('清空全部 ' + S.snapshots.length + ' 条称重记录？（不可恢复）')) {
+        S.snapshots = [];
+        save(); renderVs(); renderSnaps();
+        toast('记录已清空');
+      }
+    });
+
+    $('snapBody').addEventListener('click', e => {
+      const b = e.target.closest ? e.target.closest('button[data-del]') : null;
+      if (!b) return;
+      S.snapshots.splice(+b.dataset.del, 1);
+      save(); renderVs(); renderSnaps();
+      toast('已删除一条记录');
+    });
+
+    $('btnCsv').addEventListener('click', exportCsv);
+    $('btnPrint').addEventListener('click', () => window.print());
+    $('btnSnapM').addEventListener('click', snapshot);
+
+    /* ---- iOS「添加到主屏幕」提示 ---- */
+    $('iosHintClose').addEventListener('click', () => {
+      $('iosHint').classList.remove('on');
+      try { localStorage.setItem('cw-ios-hint', '1'); } catch (e) { /* ignore */ }
+    });
+    try {
+      const ua = (navigator && navigator.userAgent) || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const standalone = (window.navigator && window.navigator.standalone === true) ||
+        (typeof window.matchMedia === 'function' &&
+         window.matchMedia('(display-mode: standalone)').matches);
+      const dismissed = (() => { try { return localStorage.getItem('cw-ios-hint') === '1'; } catch (e) { return false; } })();
+      if (isIOS && !standalone && !dismissed) $('iosHint').classList.add('on');
+    } catch (e) { /* 非浏览器环境忽略 */ }
+
+    /* ---- Service Worker：装到主屏后离线可用 ---- */
+    try {
+      const proto = (typeof location !== 'undefined' && location.protocol) || '';
+      const host = (typeof location !== 'undefined' && location.hostname) || '';
+      const secure = proto === 'https:' || host === 'localhost' || host === '127.0.0.1';
+      if (secure && 'serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存失败不影响主功能 */ });
+        });
+      }
+    } catch (e) { /* ignore */ }
+
+    render();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>
