@@ -27,7 +27,10 @@
   --r:14px; --r2:10px;
   --mono:"JetBrains Mono","Cascadia Mono",Consolas,"SFMono-Regular",monospace;
 }
-html,body{height:100%}
+/* 注意：body 不能用 height:100% —— 否则内容溢出时 padding-bottom 不再撑开滚动区，
+   手机上最后一个卡片会被底部常驻条盖住（「清空记录」按不到就是这个原因）。 */
+html{height:100%}
+body{min-height:100%}
 body{
   font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,-apple-system,sans-serif;
   background:
@@ -61,6 +64,8 @@ button:hover{border-color:#c3cde4;background:#fafbff;transform:translateY(-1px)}
 button.primary{background:var(--acc);border-color:var(--acc);color:#fff;box-shadow:0 5px 14px rgba(59,110,245,.28)}
 button.primary:hover{background:#2f5fe6;border-color:#2f5fe6}
 button.mini{padding:4px 9px;font-size:11px;border-radius:7px}
+button.danger{width:100%;background:#fff6f5;border-color:#f6d5d3;color:#c8342f;font-weight:700;padding:11px 12px}
+button.danger:hover{background:#fdeceb;border-color:#eeb3af;color:#b32a25}
 .seg{display:flex;border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;background:#fff}
 .seg button{border:none;border-radius:0;padding:7px 14px;background:transparent;font-family:var(--mono);font-weight:700;font-size:12px;color:var(--ink2)}
 .seg button:hover{transform:none;background:#f6f8ff}
@@ -337,6 +342,8 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   .rp-total,.rp-diff{grid-column:auto}
   .cc input{font-size:24px}
   .brand h1{font-size:15px}
+  /* 手机窄屏：记录表隐藏四角明细列，避免横向滚动够不到「删」 */
+  .tbl .hide-sm{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important}
@@ -558,7 +565,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
           <div class="tablewrap">
             <table class="tbl">
               <thead><tr>
-                <th>轮位</th><th>示数</th><th>占总重</th><th>占同轴</th><th>目标</th><th>与目标差</th><th>调整方向</th>
+                <th>轮位</th><th>示数</th><th class="hide-sm">占总重</th><th class="hide-sm">占同轴</th><th>目标</th><th>与目标差</th><th>调整方向</th>
               </tr></thead>
               <tbody id="cornerBody"></tbody>
             </table>
@@ -580,8 +587,9 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
           <div style="overflow-x:auto">
             <table class="tbl">
               <thead><tr>
-                <th>#</th><th>时间</th><th>备注</th><th>FL</th><th>FR</th><th>RL</th><th>RR</th>
-                <th>总重</th><th>前%</th><th>交叉%</th><th>左右差</th><th></th>
+                <th>#</th><th>时间</th><th>备注</th>
+                <th class="hide-sm">FL</th><th class="hide-sm">FR</th><th class="hide-sm">RL</th><th class="hide-sm">RR</th>
+                <th>总重</th><th class="hide-sm">前%</th><th>交叉%</th><th class="hide-sm">左右差</th><th></th>
               </tr></thead>
               <tbody id="snapBody"></tbody>
             </table>
@@ -654,6 +662,15 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
       <div class="hint">
         把某一端垫高 H，重新读<b>前轴两个秤之和</b>。抬后轴时前轴会<b>变重</b>，抬前轴时会<b>变轻</b>。<br>
         z = |F₁ − F₂|·L·√(L² − H²) / (W·H)
+      </div>
+    </div>
+
+    <div class="dr">
+      <h3>全部重置</h3>
+      <button class="danger" id="btnResetAll">清空示数与全部记录，并恢复默认设置</button>
+      <div class="hint" style="margin-top:8px">
+        会清空四角示数、全部称重记录，并把车辆参数 / 目标分配 / 重心高度恢复默认值，单位回到 kg。<b>不可恢复</b>，
+        需要留档请先「导出 CSV」。
       </div>
     </div>
 
@@ -1167,8 +1184,8 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = CW; }
       rows.push('<tr>' +
         '<td><span class="kw"><i class="sw" style="background:' + COLOR[k] + '"></i>' + NAME[k] + '</span></td>' +
         '<td>' + f(R.weights[k]) + '</td>' +
-        '<td>' + f(p.corners[k]) + '%</td>' +
-        '<td>' + (within === null ? '—' : f(within) + '%') + '</td>' +
+        '<td class="hide-sm">' + f(p.corners[k]) + '%</td>' +
+        '<td class="hide-sm">' + (within === null ? '—' : f(within) + '%') + '</td>' +
         '<td>' + (tv === null ? '<span class="muted">—</span>' : '<span style="color:#12b3a8;font-weight:700">' + f(tv) + '</span>') + '</td>' +
         '<td>' + (dv === null ? '<span class="muted">—</span>' : fs(dv)) + '</td>' +
         '<td>' + adj + '</td></tr>');
@@ -1327,6 +1344,38 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = CW; }
     toast('已记录第 1 条 · ' + f(R.total) + ' ' + U() + ' · 交叉 ' + f(R.pct.cross) + '%');
   }
 
+  /* ---------------- 全部重置 ---------------- */
+  const DEFAULTS = () => ({
+    unit: 'kg',
+    w: { fl: '', fr: '', rl: '', rr: '' },
+    vehicle: { wheelbase: 1550, trackF: 1200, trackR: 1180 },
+    target: { enable: true, front: 45, left: 50, cross: 50, crossMode: 'fl_rr' },
+    lift: { enable: false, h: 200, f2: '', side: 'rear' },
+    note: '',
+    snapshots: []
+  });
+
+  function resetAll() {
+    const n = S.snapshots.length;
+    if (!confirm('全部重置？\n\n· 清空四角示数\n· 清空全部称重记录（' + n + ' 条）\n' +
+      '· 车辆参数 / 目标分配 / 重心高度恢复默认\n· 单位回到 kg\n\n不可恢复，需要留档请先导出 CSV。')) return;
+    const d = DEFAULTS();
+    S.unit = d.unit;
+    S.w = d.w;
+    S.vehicle = d.vehicle;
+    S.target = d.target;
+    S.lift = d.lift;
+    S.note = d.note;
+    S.snapshots = d.snapshots;
+    justSavedTs = null;
+    flashFirst = false;
+    syncInputs();
+    save();
+    render();
+    closeDrawer();
+    toast('已全部重置');
+  }
+
   function renderNotes() {
     const set = NOTE_TIPS.slice();
     S.snapshots.forEach(s => { if (s.note && set.indexOf(s.note) < 0) set.push(s.note); });
@@ -1352,14 +1401,13 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = CW; }
         '<td class="muted">' + fmtTime(s.ts) + '</td>' +
         '<td style="text-align:left;font-family:inherit;max-width:130px;overflow:hidden;text-overflow:ellipsis">' +
           (esc(s.note) || '<span class="muted">—</span>') + '</td>' +
-        '<td>' + f(fromKg(s.w.fl)) + '</td>' +
-        '<td>' + f(fromKg(s.w.fr)) + '</td>' +
-        '<td>' + f(fromKg(s.w.rl)) + '</td>' +
-        '<td>' + f(fromKg(s.w.rr)) + '</td>' +
-        '<td style="font-weight:700">' + f(fromKg(s.total)) + '</td>' +
-        '<td>' + f(s.frontPct) + '</td>' +
+        '<td class="hide-sm">' + f(fromKg(s.w.fl)) + '</td>' +
+        '<td class="hide-sm">' + f(fromKg(s.w.fr)) + '</td>' +
+        '<td class="hide-sm">' + f(fromKg(s.w.rl)) + '</td>' +
+        '<td class="hide-sm">' + f(fromKg(s.w.rr)) + '</td>' +        '<td style="font-weight:700">' + f(fromKg(s.total)) + '</td>' +
+        '<td class="hide-sm">' + f(s.frontPct) + '</td>' +
         '<td style="font-weight:700;color:#12b3a8">' + f(s.crossPct) + '</td>' +
-        '<td>' + fs(fromKg(s.leftRight)) + '</td>' +
+        '<td class="hide-sm">' + fs(fromKg(s.leftRight)) + '</td>' +
         '<td>' + btn + '</td></tr>';
     }).join('');
 
@@ -1588,6 +1636,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = CW; }
     $('btnCsv').addEventListener('click', exportCsv);
     $('btnPrint').addEventListener('click', () => window.print());
     $('btnSnapM').addEventListener('click', snapshot);
+    $('btnResetAll').addEventListener('click', resetAll);
 
     /* ---- iOS「添加到主屏幕」提示 ---- */
     $('iosHintClose').addEventListener('click', () => {
