@@ -1,7 +1,7 @@
 /* FSAE 角重量计算器 · Service Worker
    把整个应用（单文件 HTML + 图标）缓存下来，装到主屏后完全离线可用。
    ★ 更新应用后请把 CACHE 的版本号 +1，否则手机会一直用旧缓存。 */
-const CACHE = 'cw-v1';
+const CACHE = 'cw-v2';
 const ASSETS = [
   './',
   './index.html',
