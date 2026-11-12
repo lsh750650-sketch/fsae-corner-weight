@@ -17,4 +17,4 @@
 - 完整说明见主项目 README
 
 ---
-应用本体 SHA256：`0a08dbad1240a6a447704fdeb15dad2ebbb31b9a284584a8797aa6355cfe92b3`
+应用本体 SHA256：`1b04bbc7bbc3caee319002c33f71e3a312ae19f4154916972532b18e1dfba5ea`
